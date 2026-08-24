@@ -1,9 +1,10 @@
 import type { SocketConnection, SocketProxyData, SocketServer } from "@/server/types";
 import type { ServerConfig } from "@/server/types";
+import { stripBasePath } from "@keeper.sh/constants";
 import { toProxiedUrl } from "./http";
 
-function isSocketProxyPath(url: URL): boolean {
-  return url.pathname === "/api/socket";
+function isSocketProxyPath(url: URL, basePath: string): boolean {
+  return stripBasePath(url.pathname, basePath) === "/api/socket";
 }
 
 function isWebSocketUpgradeRequest(request: Request): boolean {
@@ -72,7 +73,7 @@ export function upgradeSocketProxy(
   config: ServerConfig,
 ): boolean {
   const requestUrl = new URL(request.url);
-  if (!isSocketProxyPath(requestUrl)) {
+  if (!isSocketProxyPath(requestUrl, config.basePath)) {
     return false;
   }
 

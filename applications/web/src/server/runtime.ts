@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import type { ViteDevServer } from "vite";
+import { stripBasePath } from "@keeper.sh/constants";
 import { clientDistDirectory, serverDistEntry, sourceTemplatePath } from "./paths";
 import { proxyRequest, readStaticFile } from "./proxy/http";
 import { extractViteAssets } from "./vite-assets";
@@ -40,7 +41,7 @@ async function loadProductionRenderer(): Promise<EntryServerModule> {
   return moduleValue;
 }
 
-async function createProductionRuntime(): Promise<Runtime> {
+async function createProductionRuntime(config: ServerConfig): Promise<Runtime> {
   const template = await fs.readFile(`${clientDistDirectory}/index.html`, "utf-8");
   const viteAssets = await extractViteAssets(template, true);
   const renderer = await loadProductionRenderer();
@@ -49,7 +50,9 @@ async function createProductionRuntime(): Promise<Runtime> {
     cacheableHtmlPaths: new Set(renderer.cacheableHtmlPaths),
     handleAssetRequest: async (request) => {
       const requestUrl = new URL(request.url);
-      return readStaticFile(requestUrl.pathname);
+      // Assets are written to dist/client at root-relative paths even when the
+      // build carries a prefix, so the prefix comes off before the file lookup.
+      return readStaticFile(stripBasePath(requestUrl.pathname, config.basePath));
     },
     resolveViteAssets: async () => viteAssets,
     renderApp: (request, assets) => renderer.render(request, assets),
@@ -107,7 +110,7 @@ async function createDevelopmentRuntime(vitePort: number): Promise<Runtime> {
 
 export function createRuntime(config: ServerConfig): Promise<Runtime> {
   if (config.isProduction) {
-    return createProductionRuntime();
+    return createProductionRuntime(config);
   }
 
   return createDevelopmentRuntime(config.vitePort);

@@ -1,4 +1,6 @@
+import { joinBasePath } from "@keeper.sh/constants";
 import { HttpError, readHttpErrorBody } from "./fetcher";
+import { BASE_PATH } from "./base-path";
 import type { AppJsonFetcher } from "./router-context";
 
 function createJsonFetcher(
@@ -11,7 +13,12 @@ function createJsonFetcher(
       requestHeaders.set("cookie", requestCookie);
     }
 
-    const absoluteUrl = new URL(path, origin).toString();
+    // `origin` carries no path, and `new URL("/api/x", origin)` would resolve
+    // to the root regardless of any prefix, so the prefix is joined on here.
+    // Upstream targets receive it and strip it themselves (see BASE_PATH in
+    // packages/constants), which keeps this correct whether the request goes to
+    // the gateway or straight to the API service.
+    const absoluteUrl = new URL(joinBasePath(path, BASE_PATH), origin).toString();
     const response = await fetch(absoluteUrl, {
       ...init,
       credentials: "include",

@@ -10,6 +10,11 @@ COPY --from=source /app .
 RUN turbo prune @keeper.sh/web --docker
 
 FROM base AS build
+# Vite bakes asset URLs and import.meta.env.BASE_URL at build time, so the path
+# prefix this instance is served under has to be known here rather than at
+# runtime. Empty (the default) builds for the root, matching upstream.
+ARG BASE_PATH=""
+ENV BASE_PATH=$BASE_PATH
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile
 COPY --from=prune /app/out/full/ .

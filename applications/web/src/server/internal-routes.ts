@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { KEEPER_API_RESOURCE_SCOPES } from "@keeper.sh/constants";
+import { KEEPER_API_RESOURCE_SCOPES, stripBasePath } from "@keeper.sh/constants";
 import { GDPR_COUNTRIES } from "@/config/gdpr";
 import { getGithubStarsSnapshot } from "./github-stars";
 import { proxyRequest } from "./proxy/http";
@@ -105,7 +105,15 @@ async function serveStaticTextFile(pathname: string): Promise<Response | null> {
   }
 }
 
-const resolvePublicOrigin = (request: Request): string => {
+/**
+ * The public base this instance is reachable at, prefix included.
+ *
+ * The MCP protected-resource metadata and server card built from it are
+ * absolute URLs consumed by external MCP clients, so a prefixed instance has to
+ * advertise the prefix or every URL it hands out points at a path that does not
+ * exist.
+ */
+const resolvePublicOrigin = (request: Request, basePath: string): string => {
   const url = new URL(request.url);
   const proto = request.headers.get("x-forwarded-proto");
   const host = request.headers.get("x-forwarded-host");
@@ -118,7 +126,7 @@ const resolvePublicOrigin = (request: Request): string => {
     url.host = host;
   }
 
-  return url.origin;
+  return `${url.origin}${basePath}`;
 };
 
 export async function handleInternalRoute(
@@ -129,19 +137,26 @@ export async function handleInternalRoute(
     return null;
   }
 
+  // Matched against the application's own paths, so the prefix comes off first.
   const requestUrl = new URL(request.url);
+  requestUrl.pathname = stripBasePath(requestUrl.pathname, config.basePath);
 
   if (requestUrl.pathname === "/.well-known/oauth-protected-resource") {
-    return Response.json(buildProtectedResourceMetadata(resolvePublicOrigin(request)));
+    return Response.json(
+      buildProtectedResourceMetadata(resolvePublicOrigin(request, config.basePath)),
+    );
   }
 
   if (requestUrl.pathname === MCP_SERVER_CARD_PATH) {
-    return new Response(JSON.stringify(buildMcpServerCard(resolvePublicOrigin(request))), {
-      headers: {
-        "content-type": MCP_SERVER_CARD_MEDIA_TYPE,
-        "cache-control": "public, max-age=3600",
+    return new Response(
+      JSON.stringify(buildMcpServerCard(resolvePublicOrigin(request, config.basePath))),
+      {
+        headers: {
+          "content-type": MCP_SERVER_CARD_MEDIA_TYPE,
+          "cache-control": "public, max-age=3600",
+        },
       },
-    });
+    );
   }
 
   const internalProxyPath = resolveInternalProxyPath(requestUrl.pathname);

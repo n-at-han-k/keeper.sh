@@ -1,6 +1,7 @@
 import arkenv from "arkenv";
 
 const schema = {
+  BASE_PATH: "string?",
   BETTER_AUTH_SECRET: "string",
   BETTER_AUTH_URL: "string.url",
   COMMERCIAL_MODE: "boolean?",

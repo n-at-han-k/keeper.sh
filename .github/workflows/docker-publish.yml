@@ -55,6 +55,11 @@ jobs:
             dockerfile: services/mcp/Dockerfile
           - name: web
             dockerfile: applications/web/Dockerfile
+            # Vite bakes asset URLs and import.meta.env.BASE_URL at build time,
+            # so the web image is specific to the path prefix it is served
+            # under. The cluster serves this instance at /keeper.
+            build-args: |
+              BASE_PATH=/keeper
         include:
           - arch: amd64
             runner: ubuntu-24.04
@@ -91,6 +96,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.package.dockerfile }}
+          build-args: ${{ matrix.package.build-args }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

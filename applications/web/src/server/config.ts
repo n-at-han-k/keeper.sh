@@ -1,7 +1,9 @@
 import { type } from "entrykit";
+import { normalizeBasePath } from "@keeper.sh/constants";
 import type { ServerConfig } from "./types";
 
 export const envSchema = type({
+  BASE_PATH: "string?",
   VITE_API_URL: "string.url",
   VITE_MCP_URL: "string.url?",
   ENV: "'development'|'production'|'test' = 'production'",
@@ -32,6 +34,9 @@ export function createServerConfig(environment: typeof envSchema.infer): ServerC
   const runtimeEnvironment = environment.ENV;
 
   return {
+    // Must match the BASE_PATH the image was built with: the served asset URLs
+    // are baked in at build time, this only affects request routing.
+    basePath: normalizeBasePath(environment.BASE_PATH),
     apiProxyOrigin: environment.VITE_API_URL,
     mcpProxyOrigin: environment.VITE_MCP_URL ?? null,
     environment: runtimeEnvironment,

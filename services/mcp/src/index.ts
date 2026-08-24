@@ -1,5 +1,6 @@
 import { entry } from "entrykit";
 import { join } from "node:path";
+import { normalizeBasePath, stripBasePathFromRequest } from "@keeper.sh/constants";
 import { tryLoadMcpEnv } from "./env";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
 import { destroy } from "./utils/logging";
@@ -14,6 +15,8 @@ const HTTP_NOT_FOUND = 404;
 const HTTP_METHOD_NOT_ALLOWED = 405;
 const HTTP_INTERNAL_SERVER_ERROR = 500;
 
+const basePath = normalizeBasePath(env.BASE_PATH);
+
 const router = new Bun.FileSystemRouter({
   dir: join(import.meta.dirname, "routes"),
   style: "nextjs",
@@ -25,7 +28,13 @@ await entry({
       // Bun's dev error page renders the thrown error, leaking query text and bound parameters.
       development: false,
       port: env.MCP_PORT,
-      fetch: async (request) => {
+      fetch: async (incomingRequest) => {
+        // Strip the path prefix once at the edge so the FileSystemRouter keeps
+        // matching the root-relative "/mcp" and "/health" routes. No-op when
+        // BASE_PATH is unset, and left alone for requests that arrive without
+        // the prefix (in-cluster callers and health probes address the pod
+        // directly).
+        const request = stripBasePathFromRequest(incomingRequest, basePath);
         const match = router.match(request);
 
         if (!match) {

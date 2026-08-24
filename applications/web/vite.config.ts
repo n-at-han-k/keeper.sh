@@ -11,7 +11,24 @@ import { feedPlugin } from "./plugins/feed";
 import { changelogFeedPlugin } from "./plugins/changelog-feed";
 import { sitemapPlugin } from "./plugins/sitemap";
 
+/**
+ * Path prefix this build is served under, e.g. "/keeper". Vite bakes asset URLs
+ * at build time, so unlike the API and MCP services — where BASE_PATH is read at
+ * runtime — the web image is prefix-specific and must be built with it set. Vite
+ * exposes the value to both the client and SSR bundles as import.meta.env.BASE_URL,
+ * which is what the router and the API fetcher derive their prefix from.
+ */
+const basePath = (() => {
+  const configured = process.env.BASE_PATH?.trim();
+  if (!configured || configured === "/") {
+    return "/";
+  }
+  const withLeadingSlash = configured.startsWith("/") ? configured : `/${configured}`;
+  return withLeadingSlash.endsWith("/") ? withLeadingSlash : `${withLeadingSlash}/`;
+})();
+
 export default defineConfig(({ isSsrBuild }) => ({
+  base: basePath,
   resolve: {
     alias: {
       "@": resolve(import.meta.dirname, "src"),

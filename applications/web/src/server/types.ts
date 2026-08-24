@@ -10,6 +10,8 @@ export interface Runtime {
 }
 
 export interface ServerConfig {
+  /** Path prefix this instance is served under, "" when mounted at the root. */
+  basePath: string;
   apiProxyOrigin: string;
   mcpProxyOrigin: string | null;
   environment: "development" | "production" | "test";

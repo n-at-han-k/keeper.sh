@@ -8,7 +8,8 @@ import { validateSocketToken } from "./utils/state";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
 import { socketQuerySchema } from "./utils/request-query";
 import { closeDatabase } from "@keeper.sh/database";
-import { broadcastService, database, redis } from "./context";
+import { stripBasePathFromRequest } from "@keeper.sh/constants";
+import { basePath, broadcastService, database, redis } from "./context";
 import { destroy } from "./utils/logging";
 import env from "./env";
 
@@ -29,7 +30,11 @@ await entry({
       development: false,
       port: env.API_PORT,
       websocket: websocketHandler,
-      fetch: withCors(async (request) => {
+      fetch: withCors(async (incomingRequest) => {
+        // Serving under a path prefix: strip it once here so the
+        // FileSystemRouter and every literal "/api/..." comparison below stay
+        // written against the root. No-op when BASE_PATH is unset.
+        const request = stripBasePathFromRequest(incomingRequest, basePath);
         const url = new URL(request.url);
 
         if (url.pathname.startsWith("/api/auth")) {

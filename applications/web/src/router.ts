@@ -1,5 +1,6 @@
 import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./generated/tanstack/route-tree.generated";
+import { BASE_PATH } from "./lib/base-path";
 import { createJsonFetcher } from "./lib/json-fetcher";
 import { getPublicRuntimeConfig, getServerPublicRuntimeConfig } from "./lib/runtime-config";
 import type { PublicRuntimeConfig } from "./lib/runtime-config";
@@ -103,6 +104,10 @@ function buildRouterContext(
 
 export function createAppRouter(options: CreateAppRouterOptions = {}) {
   const router = createRouter({
+    // The router is given the unmodified request URL and strips the prefix
+    // itself, which is also what makes the links it renders carry the prefix.
+    // Empty basepath is the upstream root-mounted case.
+    ...(BASE_PATH ? { basepath: BASE_PATH } : {}),
     context: buildRouterContext(options.request, options.viteAssets),
     defaultPreload: "intent",
     routeTree,

@@ -8,6 +8,8 @@ import {
   KEEPER_API_SCOPES,
   KEEPER_API_SOURCE_SCOPE,
   KEEPER_API_SYNC_SCOPE,
+  joinBasePath,
+  normalizeBasePath,
 } from "@keeper.sh/constants";
 
 const KEEPER_MCP_OAUTH_SCOPES = [
@@ -48,8 +50,20 @@ interface ResolvedMcpAuthOptions {
   };
 }
 
-const resolveAbsoluteUrl = (pathname: string, baseUrl: string): string =>
-  new URL(pathname, baseUrl).toString();
+/**
+ * Resolves a root-relative pathname against a base URL that may itself carry a
+ * path prefix.
+ *
+ * `new URL("/login", "https://host/keeper")` yields "https://host/login" — the
+ * prefix is silently dropped. These URLs become the OAuth consent and login
+ * pages, so on a prefixed instance that would redirect users to pages which do
+ * not exist. Joining onto the base URL's own pathname keeps the prefix.
+ */
+const resolveAbsoluteUrl = (pathname: string, baseUrl: string): string => {
+  const resolved = new URL(baseUrl);
+  resolved.pathname = joinBasePath(pathname, normalizeBasePath(resolved.pathname));
+  return resolved.toString();
+};
 
 const normalizeUrl = (url: string): string =>
   url.replace(/\/$/, "");

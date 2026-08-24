@@ -4,6 +4,7 @@ import { createDatabase } from "@keeper.sh/database";
 import { syncStatusTable } from "@keeper.sh/database/schema";
 import Redis from "ioredis";
 import { createAuth } from "@keeper.sh/auth";
+import { normalizeBasePath } from "@keeper.sh/constants";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { createPremiumService } from "@keeper.sh/premium";
 import {
@@ -16,6 +17,27 @@ import { widelog } from "@/utils/logging";
 import type { OAuthStateStore, RefreshLockStore, DestinationSyncResult } from "@keeper.sh/calendar";
 
 const MIN_TRUSTED_ORIGINS_COUNT = 0;
+
+/**
+ * The path prefix this instance is served under ("" when mounted at the root).
+ *
+ * BETTER_AUTH_URL must agree with it, because the two are used for different
+ * halves of the same URL: BASE_PATH strips the prefix off inbound pathnames,
+ * while BETTER_AUTH_URL is what better-auth concatenates to mint the absolute
+ * OIDC issuer, OAuth redirect_uri and MCP JWKS URLs that leave the instance. If
+ * they disagree the mismatch is invisible until a provider rejects a callback,
+ * so it is checked once at boot instead.
+ */
+const basePath = normalizeBasePath(env.BASE_PATH);
+const authUrlBasePath = normalizeBasePath(new URL(env.BETTER_AUTH_URL).pathname);
+
+if (basePath !== authUrlBasePath) {
+  throw new Error(
+    `BASE_PATH ("${basePath || "/"}") and the path of BETTER_AUTH_URL ` +
+      `("${authUrlBasePath || "/"}") must match. Set BETTER_AUTH_URL to the ` +
+      `full public URL this instance is served from, prefix included.`,
+  );
+}
 
 const database = await createDatabase(env.DATABASE_URL, { maxConnections: env.DATABASE_POOL_MAX });
 const redis = new Redis(env.REDIS_URL, {
@@ -67,6 +89,7 @@ const { auth, capabilities: authCapabilities } = createAuth({
   database,
   secret: env.BETTER_AUTH_SECRET,
   baseUrl: env.BETTER_AUTH_URL,
+  basePath,
   commercialMode: env.COMMERCIAL_MODE ?? false,
   polarAccessToken: env.POLAR_ACCESS_TOKEN,
   polarMode: env.POLAR_MODE,
@@ -161,6 +184,7 @@ export {
   database,
   redis,
   env,
+  basePath,
   webhookConfig,
   trustedOrigins,
   auth,

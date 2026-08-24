@@ -9,6 +9,7 @@ import { passkey as passkeyPlugin } from "@better-auth/passkey";
 import { checkout, polar, portal } from "@polar-sh/better-auth";
 import { Polar } from "@polar-sh/sdk";
 import { Resend } from "resend";
+import { joinBasePath, normalizeBasePath } from "@keeper.sh/constants";
 import { usernameOnly } from "./plugins/username-only";
 import { deletePolarCustomerByExternalId } from "./polar-customer-delete";
 import { writeAuthStderr } from "./runtime-environment";
@@ -46,6 +47,11 @@ interface AuthConfig {
   database: BunSQLDatabase;
   secret: string;
   baseUrl: string;
+  /**
+   * Path prefix this instance is served under, e.g. "/keeper". Empty (the
+   * default) means mounted at the root, which is upstream behaviour.
+   */
+  basePath?: string;
   commercialMode?: boolean;
   polarAccessToken?: string;
   polarMode?: "sandbox" | "production";
@@ -123,6 +129,7 @@ const createAuth = (config: AuthConfig) => {
     database,
     secret,
     baseUrl,
+    basePath: configuredBasePath,
     commercialMode = false,
     polarAccessToken,
     polarMode,
@@ -138,6 +145,13 @@ const createAuth = (config: AuthConfig) => {
     mcpResourceUrl,
     mcpApiBaseUrl,
   } = config;
+
+  // baseUrl is the full public URL including any prefix, and is what the
+  // absolute URLs handed out to providers and MCP clients are built from.
+  // authOrigin is the same URL with the path removed, for better-auth's own
+  // baseURL + basePath composition.
+  const basePath = normalizeBasePath(configuredBasePath);
+  const authOrigin = new URL(baseUrl).origin;
 
   const buildResendClient = (): Resend | null => {
     if (resendApiKey) {
@@ -180,7 +194,10 @@ const createAuth = (config: AuthConfig) => {
       if (!baseUrl) {
         return "/dashboard/billing?success=true";
       }
-      return new URL("/dashboard/billing?success=true", baseUrl).toString();
+      return new URL(
+        joinBasePath("/dashboard/billing?success=true", basePath),
+        baseUrl,
+      ).toString();
     };
 
     const checkoutSuccessUrl = buildCheckoutSuccessUrl();
@@ -246,8 +263,12 @@ const createAuth = (config: AuthConfig) => {
         allowDifferentEmails: true,
       },
     },
-    basePath: "/api/auth",
-    baseURL: baseUrl,
+    // better-auth concatenates baseURL + basePath. Handing it the bare origin
+    // and folding the prefix into basePath keeps that composition unambiguous,
+    // rather than relying on how a given better-auth version treats a baseURL
+    // that already carries a path.
+    basePath: joinBasePath("/api/auth", basePath),
+    baseURL: authOrigin,
     database: drizzleAdapter(database, {
       provider: "pg",
       schema: {

@@ -1,3 +1,4 @@
+import { joinBasePath, stripBasePath } from "@keeper.sh/constants";
 import { withCompression } from "./compression";
 import { isApiRequest, isMcpRequest, proxyRequest } from "./proxy/http";
 import { handleInternalRoute } from "./internal-routes";
@@ -88,11 +89,16 @@ function permanentRedirect(location: string): Response {
   });
 }
 
-export function resolveCanonicalRedirect(requestUrl: URL): Response | null {
-  const pathname = requestUrl.pathname;
+export function resolveCanonicalRedirect(requestUrl: URL, basePath = ""): Response | null {
+  // Canonicalisation is defined over the application's own paths, so the prefix
+  // comes off before matching and goes back on before redirecting — otherwise
+  // every redirect would drop the visitor out of the prefix.
+  const pathname = stripBasePath(requestUrl.pathname, basePath);
+  const redirectTo = (target: string): Response =>
+    permanentRedirect(`${joinBasePath(target, basePath) || "/"}${requestUrl.search}`);
 
   if (pathname === "/index.html") {
-    return permanentRedirect(`/${requestUrl.search}`);
+    return redirectTo("/");
   }
 
   const trimmedPath =
@@ -102,11 +108,11 @@ export function resolveCanonicalRedirect(requestUrl: URL): Response | null {
 
   const movedPath = resolveMovedPath(trimmedPath);
   if (movedPath) {
-    return permanentRedirect(`${movedPath}${requestUrl.search}`);
+    return redirectTo(movedPath);
   }
 
   if (trimmedPath !== pathname) {
-    return permanentRedirect(`${trimmedPath}${requestUrl.search}`);
+    return redirectTo(trimmedPath);
   }
 
   return null;
@@ -145,20 +151,28 @@ export async function handleApplicationRequest(
   config: ServerConfig,
 ): Promise<Response> {
   const requestUrl = new URL(request.url);
+  // Routing decisions below are written against the application's own paths, so
+  // they are made on a prefix-stripped copy of the URL. The request itself is
+  // passed through unmodified: the TanStack router is configured with the same
+  // prefix as its basepath and strips it itself, which is what makes the links
+  // it renders carry the prefix.
+  const routedUrl = new URL(requestUrl);
+  routedUrl.pathname = stripBasePath(requestUrl.pathname, config.basePath);
+
   const internalRouteResponse = await handleInternalRoute(request, config);
   if (internalRouteResponse) {
     return internalRouteResponse;
   }
 
-  if (isMcpRequest(requestUrl) && config.mcpProxyOrigin) {
+  if (isMcpRequest(routedUrl) && config.mcpProxyOrigin) {
     return proxyRequest(request, config.mcpProxyOrigin);
   }
 
-  if (isApiRequest(requestUrl)) {
+  if (isApiRequest(routedUrl)) {
     return proxyRequest(request, config.apiProxyOrigin);
   }
 
-  const canonicalRedirect = resolveCanonicalRedirect(requestUrl);
+  const canonicalRedirect = resolveCanonicalRedirect(requestUrl, config.basePath);
   if (canonicalRedirect) {
     return canonicalRedirect;
   }
@@ -168,7 +182,7 @@ export async function handleApplicationRequest(
     return withCompression(request, assetResponse);
   }
 
-  const pathname = requestUrl.pathname;
+  const pathname = routedUrl.pathname;
   const cookieHeader = request.headers.get("cookie") ?? undefined;
   const isAuthenticated = hasSessionCookie(cookieHeader);
   const cacheKey = pathname;
