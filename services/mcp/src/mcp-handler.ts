@@ -43,6 +43,12 @@ interface CreateKeeperMcpHandlerOptions {
   auth: KeeperMcpAuth;
   mcpPublicUrl: string;
   apiBaseUrl: string;
+  /**
+   * Serves bearer-less requests as a fixed user, for running as a
+   * cluster-internal backend of an MCP aggregator. Omitted (the upstream
+   * default) means every request must carry an OAuth bearer.
+   */
+  resolveServiceSession?: () => Promise<AuthenticatedKeeperMcpSession | null>;
   toolset: KeeperMcpToolset;
   serverInfo?: {
     name: string;
@@ -196,6 +202,7 @@ const createKeeperMcpHandler = ({
     version: "1.0.0",
   },
   enableJsonResponse = true,
+  resolveServiceSession,
 }: CreateKeeperMcpHandlerOptions) => {
   // Keep any path prefix on the resource URL. `new URL("/.well-known/...",
   // "https://host/keeper/mcp")` resolves to the ORIGIN root and silently drops
@@ -241,7 +248,13 @@ const createKeeperMcpHandler = ({
         },
       );
 
-    const sessionResult = await resolveMcpSession(auth, request.headers);
+    // A request carrying a bearer always goes through OAuth validation. Only a
+    // bearer-LESS one falls back to the service token, and only when one is
+    // configured — so this cannot weaken an authenticated request.
+    const sessionResult = extractBearerToken(request.headers) === null && resolveServiceSession
+      ? await resolveServiceSession().then((session): McpSessionResolution =>
+        session ? { authenticated: true, session } : { authenticated: false })
+      : await resolveMcpSession(auth, request.headers);
 
     if (!sessionResult.authenticated) {
       return unauthorizedResponse();

@@ -5,6 +5,7 @@ import env from "./env";
 import { createKeeperMcpHandler } from "./mcp-handler";
 import { createKeeperMcpToolset } from "./toolset";
 import { withWideEvent } from "./utils/middleware";
+import { resolveServiceSession } from "./utils/service-token";
 
 // Path prefix this instance is served under; "" reproduces upstream behaviour.
 const basePath = normalizeBasePath(env.BASE_PATH);
@@ -32,6 +33,11 @@ const handleMcpRequest = createKeeperMcpHandler({
   mcpPublicUrl: env.MCP_PUBLIC_URL,
   apiBaseUrl: env.MCP_API_URL ?? env.BETTER_AUTH_URL,
   toolset: keeperMcpToolset,
+  // Only wired up when MCP_SERVICE_TOKEN is set; otherwise undefined, which
+  // leaves the handler on upstream's bearer-only path.
+  ...(env.MCP_SERVICE_TOKEN && {
+    resolveServiceSession: () => resolveServiceSession(database, env.MCP_SERVICE_TOKEN),
+  }),
 });
 
 export { auth, basePath, database, env, handleMcpRequest, keeperMcpToolset, withWideEvent };
