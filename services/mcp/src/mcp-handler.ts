@@ -1,3 +1,4 @@
+import { normalizeBasePath } from "@keeper.sh/constants";
 import { KEEPER_API_READ_SCOPE } from "@keeper.sh/auth";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
@@ -196,10 +197,20 @@ const createKeeperMcpHandler = ({
   },
   enableJsonResponse = true,
 }: CreateKeeperMcpHandlerOptions) => {
-  const protectedResourceMetadataUrl = new URL(
-    "/.well-known/oauth-protected-resource",
-    mcpPublicUrl,
-  ).toString();
+  // Keep any path prefix on the resource URL. `new URL("/.well-known/...",
+  // "https://host/keeper/mcp")` resolves to the ORIGIN root and silently drops
+  // /keeper, so a prefixed instance would advertise a metadata URL that nothing
+  // serves. Clients follow whatever this WWW-Authenticate header names, so
+  // hanging it under the prefix keeps discovery self-contained rather than
+  // requiring a route carved off the root of a shared host.
+  const protectedResourceMetadataUrl = (() => {
+    const resource = new URL(mcpPublicUrl);
+    const prefix = normalizeBasePath(resource.pathname.replace(/\/mcp$/, ""));
+    return new URL(
+      `${prefix}/.well-known/oauth-protected-resource`,
+      resource.origin,
+    ).toString();
+  })();
 
   return async (request: Request): Promise<Response> => {
     if (!ALLOWED_HTTP_METHODS.has(request.method)) {
